@@ -766,6 +766,24 @@ const panelStyleClassRule: Rule = {
 // EXPORT ALL RULES
 // ---------------------------------------------------------------------------
 
+import {
+  lazyLoadEventRule,
+  angularVersionRule,
+  pTemplateRenameRules,
+  pStepsActiveIndexRule,
+  filterMatchModeRule,
+  dynamicDialogRule,
+  treeNodeLeafRule,
+  dialogPositionRule,
+  messageServiceStickyRule,
+  passwordFeedbackRule,
+  confirmationServiceRule,
+  primeIconsRenameRule,
+  buttonDisabledRule,
+  inputTextDirectiveRule,
+  toastZIndexRule,
+} from './rules-extra';
+
 export const ALL_RULES: Rule[] = [
   // Component selector renames
   ...REAL_SELECTOR_RENAMES.map(makeSelectorRule),
@@ -785,13 +803,28 @@ export const ALL_RULES: Rule[] = [
   panelStyleClassRule,
   messageClosableRule,
   dialogBlockScrollRule,
+  toastZIndexRule,
+  // pTemplate name casing
+  ...pTemplateRenameRules,
   // High-level API changes
   primeNGConfigRule,
   browserAnimationsRule,
+  lazyLoadEventRule,
+  filterMatchModeRule,
+  dynamicDialogRule,
+  treeNodeLeafRule,
+  dialogPositionRule,
+  messageServiceStickyRule,
+  passwordFeedbackRule,
+  confirmationServiceRule,
+  pStepsActiveIndexRule,
+  buttonDisabledRule,
+  inputTextDirectiveRule,
   // Theme
   legacyThemeStylesheetRule,
   primengCssImportRule,
   primeIconsImportRule,
+  primeIconsRenameRule,
   // Removed components
   dataScrollerRule,
   lightboxRule,
@@ -799,6 +832,7 @@ export const ALL_RULES: Rule[] = [
   terminalServiceRule,
   // Version check
   packageVersionRule,
+  angularVersionRule,
 ];
 
 export { REAL_SELECTOR_RENAMES, ALL_TS_RENAMES, TYPE_RENAMES };

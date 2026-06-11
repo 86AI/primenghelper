@@ -5,6 +5,8 @@ import chalk from 'chalk';
 import { ALL_RULES } from './rules';
 import { scanProject } from './scanner';
 import { buildReport, printReport, printCategorySummary, toJson } from './reporter';
+import { generateHtmlReport } from './html-report';
+import * as fs from 'fs';
 
 const pkg = require('../package.json') as { version: string; description: string };
 
@@ -22,13 +24,14 @@ program
 program
   .command('scan [projectRoot]', { isDefault: true })
   .description('Scan an Angular project for PrimeNG 16 → 20 migration issues')
-  .option('-v, --verbose',       'Show before/after snippets and manual-step hints')
-  .option('-s, --summary',       'Print a per-category issue summary')
-  .option('-j, --json',          'Output results as JSON')
-  .option('--include <globs...>', 'Additional glob patterns to include')
-  .option('--exclude <globs...>', 'Glob patterns to exclude (merged with defaults)')
-  .option('--only-fixable',      'Only report auto-fixable issues')
-  .option('--rule <ruleIds...>', 'Run only specific rule IDs')
+  .option('-v, --verbose',         'Show before/after snippets and manual-step hints')
+  .option('-s, --summary',         'Print a per-category issue summary')
+  .option('-j, --json',            'Output results as JSON')
+  .option('--html [outputFile]',   'Output an HTML report (default: primeng-migration-report.html)')
+  .option('--include <globs...>',  'Additional glob patterns to include')
+  .option('--exclude <globs...>',  'Glob patterns to exclude (merged with defaults)')
+  .option('--only-fixable',        'Only report auto-fixable issues')
+  .option('--rule <ruleIds...>',   'Run only specific rule IDs')
   .action(async (projectRoot: string | undefined, opts) => {
     const cwd = path.resolve(projectRoot ?? '.');
     console.log(chalk.bold(`\nScanning ${chalk.cyan(cwd)} for PrimeNG 16 → 20 issues...\n`));
@@ -51,13 +54,18 @@ program
       exclude: opts.exclude,
     });
 
-    // Count how many files were scanned (including those with no issues)
-    // We can't know that number without extra work, so we report files-with-issues
     const report = buildReport(results, results.length, 0);
 
     if (opts.json) {
       console.log(toJson(report));
       process.exit(report.totalIssues > 0 ? 1 : 0);
+    }
+
+    if (opts.html !== undefined) {
+      const outFile = typeof opts.html === 'string' ? opts.html : 'primeng-migration-report.html';
+      const html = generateHtmlReport(report, cwd);
+      fs.writeFileSync(outFile, html, 'utf8');
+      console.log(chalk.green(`  HTML report written to ${outFile}\n`));
     }
 
     const filtered = opts.onlyFixable
@@ -80,13 +88,14 @@ program
 program
   .command('fix [projectRoot]')
   .description('Scan and auto-fix PrimeNG 16 → 20 issues (modifies files in place)')
-  .option('-v, --verbose',        'Show before/after snippets')
-  .option('-d, --dry-run',        'Show what would be changed without writing files')
-  .option('-s, --summary',        'Print a per-category issue summary')
-  .option('-j, --json',           'Output results as JSON')
-  .option('--include <globs...>', 'Additional glob patterns to include')
-  .option('--exclude <globs...>', 'Glob patterns to exclude (merged with defaults)')
-  .option('--rule <ruleIds...>',  'Fix only specific rule IDs')
+  .option('-v, --verbose',         'Show before/after snippets')
+  .option('-d, --dry-run',         'Show what would be changed without writing files')
+  .option('-s, --summary',         'Print a per-category issue summary')
+  .option('-j, --json',            'Output results as JSON')
+  .option('--html [outputFile]',   'Output an HTML report (default: primeng-migration-report.html)')
+  .option('--include <globs...>',  'Additional glob patterns to include')
+  .option('--exclude <globs...>',  'Glob patterns to exclude (merged with defaults)')
+  .option('--rule <ruleIds...>',   'Fix only specific rule IDs')
   .action(async (projectRoot: string | undefined, opts) => {
     const cwd = path.resolve(projectRoot ?? '.');
     const mode = opts.dryRun ? '(DRY RUN — no files will be written)' : '';
@@ -119,6 +128,13 @@ program
     if (opts.json) {
       console.log(toJson(report));
       process.exit(0);
+    }
+
+    if (opts.html !== undefined) {
+      const outFile = typeof opts.html === 'string' ? opts.html : 'primeng-migration-report.html';
+      const html = generateHtmlReport(report, cwd);
+      fs.writeFileSync(outFile, html, 'utf8');
+      console.log(chalk.green(`  HTML report written to ${outFile}\n`));
     }
 
     printReport(report, cwd, opts.verbose ?? false);
