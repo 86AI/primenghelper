@@ -1,20 +1,5 @@
 import { Rule, RuleMatch } from './types';
-import { fixContent, scanContent } from './scanner';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function scan(content: string, pattern: RegExp, buildMatch: (m: RegExpExecArray) => RuleMatch | null): RuleMatch[] {
-  const results: RuleMatch[] = [];
-  const re = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `g${pattern.flags}`);
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) {
-    const result = buildMatch(m);
-    if (result !== null) results.push(result);
-  }
-  return results;
-}
+import { scan, parseMajorVersion } from './helpers';
 
 // ---------------------------------------------------------------------------
 // 1. LazyLoadEvent renamed to TableLazyLoadEvent
@@ -101,7 +86,7 @@ export const angularVersionRule: Rule = {
     const re = /"@angular\/core"\s*:\s*"([^"]+)"/g;
     return scan(content, re, (m) => {
       const ver = m[1];
-      const major = parseInt(ver.replace(/[^0-9]/, ''), 10);
+      const major = parseMajorVersion(ver);
       if (!isNaN(major) && major < 18) {
         return {
           index: m.index,
@@ -116,7 +101,7 @@ export const angularVersionRule: Rule = {
   },
   fix(content) {
     return content.replace(/"@angular\/core"\s*:\s*"([^"]+)"/g, (_m, ver) => {
-      const major = parseInt(ver.replace(/[^0-9]/, ''), 10);
+      const major = parseMajorVersion(ver);
       return (!isNaN(major) && major < 18) ? '"@angular/core": "^18.0.0"' : _m;
     });
   },
@@ -142,7 +127,7 @@ export const pTemplateRenameRules: Rule[] = PTEMPLATE_RENAMES
     description: `pTemplate="${from}" renamed to pTemplate="${to}" in PrimeNG 17+`,
     category: 'property-rename' as const,
     severity: 'error' as const,
-    fileTypes: ['html', 'ts'] as Array<'html' | 'ts'>,
+    fileTypes: ['html'] as Array<'html'>,
     check(content: string): RuleMatch[] {
       const re = new RegExp(`pTemplate\\s*=\\s*["']${from}["']`, 'g');
       return scan(content, re, (m) => ({
@@ -167,7 +152,7 @@ export const pStepsActiveIndexRule: Rule = {
   description: '`[activeIndex]` / `(activeIndexChange)` removed from `p-steps` in PrimeNG 19',
   category: 'structural',
   severity: 'error',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     // Matches [activeIndex], [(activeIndex)], and (activeIndexChange)
     const re = /\[?\(activeIndex\)\]?|\[activeIndex\]|\(activeIndexChange\)/g;
@@ -195,7 +180,7 @@ export const filterMatchModeRule: Rule = {
   description: '`FilterMatchMode` enum values changed to string literals in PrimeNG 17+',
   category: 'api-change',
   severity: 'warning',
-  fileTypes: ['ts', 'html'],
+  fileTypes: ['ts'],
   check(content) {
     const re = /FilterMatchMode\.[A-Z_]+/g;
     return scan(content, re, (m) => ({
@@ -273,7 +258,7 @@ export const dialogPositionRule: Rule = {
   description: '`[position]` values on `p-dialog` changed in PrimeNG 17+',
   category: 'api-change',
   severity: 'warning',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     // Old values: 'center' | 'top' | 'bottom' | 'left' | 'right' | 'topleft' | 'topright' | 'bottomleft' | 'bottomright'
     // Still the same in v20 but behaviour in RTL / responsive changed
@@ -330,7 +315,7 @@ export const passwordFeedbackRule: Rule = {
   description: '`p-password` `[feedback]` input still works but `promptLabel`, `weakLabel`, etc. were renamed',
   category: 'property-rename',
   severity: 'warning',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /\b(promptLabel|weakLabel|mediumLabel|strongLabel)\b/g;
     return scan(content, re, (m) => {
@@ -422,7 +407,7 @@ export const buttonDisabledRule: Rule = {
   description: '`[disabled]` on `p-button` is deprecated — use `[disabled]` on the inner `<button>` or the `disabled` attribute',
   category: 'property-rename',
   severity: 'info',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     // Look for [disabled] binding specifically on p-button tags
     const re = /<p-button[^>]*\[disabled\][^>]*>/gi;
@@ -445,7 +430,7 @@ export const inputTextDirectiveRule: Rule = {
   description: '`pInputText` directive: `variant` input added in PrimeNG 17+ for filled style',
   category: 'api-change',
   severity: 'info',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     // Flag the old pattern of styling with class="p-inputtext-sm" etc.
     const re = /class\s*=\s*["'][^"']*p-inputtext-(?:sm|lg)[^"']*["']/g;
@@ -469,13 +454,14 @@ export const toastZIndexRule: Rule = {
   description: '`[baseZIndex]` and `[autoZIndex]` removed from `p-toast` and overlay components in PrimeNG 17+',
   category: 'property-rename',
   severity: 'error',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /\[?(baseZIndex|autoZIndex)\]?\s*=/g;
     return scan(content, re, (m) => ({
       index: m.index,
       length: m[0].length,
       originalText: m[0],
+      fixedText: '',
       message: `\`${m[0].trim()}\` was removed in PrimeNG 17. Z-index is now managed via CSS variables (--p-zindex-overlay).`,
     }));
   },

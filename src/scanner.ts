@@ -55,6 +55,7 @@ function extractInlineTemplates(tsContent: string): InlineTemplate[] {
       i++;
     }
     results.push({ contentStart, content: tsContent.slice(contentStart, i) });
+    markerRe.lastIndex = i + 1;
   }
   return results;
 }
@@ -85,7 +86,7 @@ function scanInlineTemplates(tsContent: string, filePath: string, rules: Rule[])
           message: `[inline template] ${match.message}`,
           originalText: match.originalText,
           fixedText: match.fixedText,
-          autoFixable: match.fixedText !== undefined && rule.fix !== undefined,
+          autoFixable: rule.fix !== undefined,
           manualSteps: rule.manualSteps,
         });
       }
@@ -148,7 +149,7 @@ export function scanContent(content: string, filePath: string, rules: Rule[]): I
         message: match.message,
         originalText: match.originalText,
         fixedText: match.fixedText,
-        autoFixable: match.fixedText !== undefined && rule.fix !== undefined,
+        autoFixable: rule.fix !== undefined,
         manualSteps: rule.manualSteps,
       });
     }

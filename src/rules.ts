@@ -1,24 +1,5 @@
 import { Rule, RuleMatch } from './types';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function scan(content: string, pattern: RegExp, buildMatch: (m: RegExpExecArray) => RuleMatch | null): RuleMatch[] {
-  const results: RuleMatch[] = [];
-  const re = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `g${pattern.flags}`);
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) {
-    const result = buildMatch(m);
-    if (result !== null) results.push(result);
-  }
-  return results;
-}
-
-/** Build a simple global replace rule for `fix`. */
-function globalReplace(from: RegExp, to: string | ((m: string, ...g: string[]) => string)): (content: string) => string {
-  return (content) => content.replace(new RegExp(from.source, from.flags.includes('g') ? from.flags : `g${from.flags}`), to as string);
-}
+import { scan, globalReplace, escPath, parseMajorVersion } from './helpers';
 
 // ---------------------------------------------------------------------------
 // 1. HTML COMPONENT SELECTOR RENAMES
@@ -93,7 +74,7 @@ function makeSelectorRule(rename: SelectorRename): Rule {
     description: `Rename <${from}> → <${to}>`,
     category: 'component-rename',
     severity: 'error',
-    fileTypes: ['html', 'ts'],
+    fileTypes: ['html'],
     check(content) {
       const matches: RuleMatch[] = [];
       const check = (re: RegExp, buildFixed: (m: RegExpExecArray) => string) => {
@@ -183,7 +164,7 @@ function makeModuleImportRule(rename: ModuleRename): Rule {
   // Matches: import { ..., OldSymbol, ... } from 'primeng/old-path'
   // The symbol may appear anywhere inside the braces, with commas/spaces/newlines around it
   const importRe = new RegExp(
-    `import\\s*\\{([^}]*)\\b(${oldSymbol})\\b([^}]*)\\}\\s*from\\s*['"]${oldPath.replace('/', '\\/')}['"]`,
+    `import\\s*\\{([^}]*)\\b(${oldSymbol})\\b([^}]*)\\}\\s*from\\s*['"](?:${escPath(oldPath)}|${escPath(newPath)})['"]`,
     'g',
   );
 
@@ -200,7 +181,7 @@ function makeModuleImportRule(rename: ModuleRename): Rule {
         originalText: m[0],
         fixedText: m[0]
           .replace(new RegExp(`\\b${oldSymbol}\\b`, 'g'), newSymbol)
-          .replace(new RegExp(`['"]${oldPath.replace('/', '\\/')}['"]`), `'${newPath}'`),
+          .replace(new RegExp(`['"](?:${escPath(oldPath)}|${escPath(newPath)})['"]`), `'${newPath}'`),
         message: note
           ? `Replace ${oldSymbol} with ${newSymbol} and update import path to '${newPath}'. ${note}`
           : `Replace ${oldSymbol} with ${newSymbol} (path: '${newPath}').`,
@@ -210,7 +191,7 @@ function makeModuleImportRule(rename: ModuleRename): Rule {
       return content.replace(importRe, (match) =>
         match
           .replace(new RegExp(`\\b${oldSymbol}\\b`, 'g'), newSymbol)
-          .replace(new RegExp(`['"]${oldPath.replace('/', '\\/')}['"]`), `'${newPath}'`),
+          .replace(new RegExp(`['"](?:${escPath(oldPath)}|${escPath(newPath)})['"]`), `'${newPath}'`),
       );
     },
   };
@@ -274,7 +255,7 @@ const styleClassRule: Rule = {
   description: '`styleClass` input is deprecated — use `class` instead',
   category: 'property-rename',
   severity: 'warning',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     // Match [styleClass]="..." or styleClass="..."
     const re = /\[?styleClass\]?\s*=\s*["'][^"']*["']/g;
@@ -295,13 +276,14 @@ const transitionOptionsRule: Rule = {
   description: '`showTransitionOptions` and `hideTransitionOptions` are removed in PrimeNG 20',
   category: 'property-rename',
   severity: 'error',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /\[?(show|hide)TransitionOptions\]?\s*=/g;
     return scan(content, re, (m) => ({
       index: m.index,
       length: m[0].length,
       originalText: m[0],
+      fixedText: '',
       message: `\`${m[0].trim()}\` was removed in PrimeNG 17+. Remove this binding entirely.`,
     }));
   },
@@ -319,7 +301,7 @@ const appendToBodyRule: Rule = {
   description: '`appendTo="body"` is now the default behaviour in PrimeNG 20',
   category: 'property-rename',
   severity: 'info',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /appendTo\s*=\s*["']body["']/g;
     return scan(content, re, (m) => ({
@@ -337,7 +319,7 @@ const tabViewStructureRule: Rule = {
   description: '`p-tabview` / `p-tabpanel` API changed in PrimeNG 19 — now uses `p-tabs` / `p-tabpanel` with new inputs',
   category: 'structural',
   severity: 'warning',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /<p-tabpanel\s[^>]*\[?header\]?\s*=/gi;
     return scan(content, re, (m) => ({
@@ -360,7 +342,7 @@ const accordionTabStructureRule: Rule = {
   description: '`p-accordionTab` replaced by `p-accordion-panel` in PrimeNG 19',
   category: 'structural',
   severity: 'warning',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /<p-accordiontab\b/gi;
     return scan(content, re, (m) => ({
@@ -525,7 +507,7 @@ const dataScrollerRule: Rule = {
   description: '`p-dataScroller` was removed in PrimeNG 17',
   category: 'api-change',
   severity: 'error',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /<\/?p-datascroller\b/gi;
     return scan(content, re, (m) => ({
@@ -543,7 +525,7 @@ const lightboxRule: Rule = {
   description: '`p-lightbox` was removed — use `p-galleria` in lightbox mode',
   category: 'api-change',
   severity: 'error',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /<\/?p-lightbox\b/gi;
     return scan(content, re, (m) => ({
@@ -582,7 +564,7 @@ const chipsRule: Rule = {
   description: '`p-chips` is deprecated — use `p-autocomplete` with `[multiple]="true"` in PrimeNG 20',
   category: 'component-rename',
   severity: 'warning',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /<\/?p-chips\b/gi;
     return scan(content, re, (m) => ({
@@ -614,7 +596,7 @@ const packageVersionRule: Rule = {
     const matches: RuleMatch[] = [];
     scan(content, re, (m) => {
       const version = m[1];
-      const major = parseInt(version.replace(/[^0-9].*/, ''), 10);
+      const major = parseMajorVersion(version);
       if (!isNaN(major) && major < 17) {
         return {
           index: m.index,
@@ -640,7 +622,7 @@ const messageClosableRule: Rule = {
   description: '`p-message` `closable` default changed to `false` in PrimeNG 20',
   category: 'api-change',
   severity: 'info',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /<p-message[^>]*>/gi;
     return scan(content, re, (m) => {
@@ -664,7 +646,7 @@ const dialogBlockScrollRule: Rule = {
   description: '`p-dialog` `blockScroll` default changed to `false` in PrimeNG 20',
   category: 'api-change',
   severity: 'info',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /<p-dialog\b[^>]*>/gi;
     return scan(content, re, (m) => {
@@ -688,7 +670,7 @@ const tableRowTrackByRule: Rule = {
   description: '`p-table` `rowTrackBy` input renamed to `trackBy`',
   category: 'property-rename',
   severity: 'error',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /\[rowTrackBy\]\s*=/g;
     return scan(content, re, (m) => ({
@@ -708,7 +690,7 @@ const dropdownFilterRule: Rule = {
   description: '`[filter]="true"` on p-select can be simplified to just `filter`',
   category: 'property-rename',
   severity: 'info',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /\[filter\]\s*=\s*["']true["']/g;
     return scan(content, re, (m) => ({
@@ -728,7 +710,7 @@ const inputStyleClassRule: Rule = {
   description: '`inputStyleClass` renamed to `inputClass` in several components',
   category: 'property-rename',
   severity: 'warning',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /\[?inputStyleClass\]?\s*=/g;
     return scan(content, re, (m) => ({
@@ -748,7 +730,7 @@ const panelStyleClassRule: Rule = {
   description: '`panelStyleClass` renamed to `panelClass` in overlay components',
   category: 'property-rename',
   severity: 'warning',
-  fileTypes: ['html', 'ts'],
+  fileTypes: ['html'],
   check(content) {
     const re = /\[?panelStyleClass\]?\s*=/g;
     return scan(content, re, (m) => ({
